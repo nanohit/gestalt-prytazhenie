@@ -1,0 +1,893 @@
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import EditableText from '../components/EditableText.svelte';
+  import { generateThemeVars } from '$lib/color';
+  import {
+    isAdmin,
+    siteContent,
+    contentStatus,
+    contentError,
+    updateContent,
+    loadContent,
+  } from '$lib/stores';
+  import {
+    createEmptyDay,
+    createEmptySession,
+    createEmptySpeaker,
+    createEmptyPricingOption,
+    createSection,
+    type Section,
+    type ProgramSectionData,
+    type SpeakersSectionData,
+    type PricingSectionData,
+    type RegistrationSectionData,
+    type TextSectionData,
+  } from '$lib/content';
+
+  const IMGBB_API_KEY = 'dea282c8a3ed6b4d82eed4ea65ab3826';
+  const ADMIN_LOGIN = 'admin';
+  const ADMIN_PASSWORD = '123456789';
+  const STORAGE_KEY = 'gestalt-admin-auth';
+
+  let isLoginModalOpen = $state(false);
+  let loginField = $state('admin');
+  let passwordField = $state('');
+  let loginError = $state('');
+
+  let themeStyle = $derived(generateThemeVars($siteContent.primaryColor || '#0aa5b5'));
+
+  onMount(() => {
+    if (localStorage.getItem(STORAGE_KEY) === 'true') {
+      isAdmin.set(true);
+    }
+    loadContent();
+  });
+
+  function handleOpenLogin() {
+    loginField = ADMIN_LOGIN;
+    passwordField = '';
+    loginError = '';
+    isLoginModalOpen = true;
+  }
+
+  function handleCloseLogin() {
+    isLoginModalOpen = false;
+    passwordField = '';
+    loginError = '';
+  }
+
+  function handleLoginSubmit(event: SubmitEvent) {
+    event.preventDefault();
+    if (loginField === ADMIN_LOGIN && passwordField === ADMIN_PASSWORD) {
+      isAdmin.set(true);
+      localStorage.setItem(STORAGE_KEY, 'true');
+      isLoginModalOpen = false;
+      passwordField = '';
+      loginError = '';
+    } else {
+      loginError = 'Неверный логин или пароль';
+    }
+  }
+
+  function handleLogout() {
+    isAdmin.set(false);
+    localStorage.removeItem(STORAGE_KEY);
+  }
+
+  function scrollToSection(id: string) {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function scrollToFirst(type?: string) {
+    const s = type
+      ? $siteContent.sections.find((s) => s.visible && s.type === type)
+      : $siteContent.sections.find((s) => s.visible);
+    if (s) scrollToSection(s.id);
+  }
+
+  // --- Section helpers ---
+  function updateSection(si: number, updater: (s: Section) => Section) {
+    updateContent((prev) => ({
+      ...prev,
+      sections: prev.sections.map((s, i) => (i === si ? updater(s) : s)),
+    }));
+  }
+
+  function toggleVisibility(si: number) {
+    updateSection(si, (s) => ({ ...s, visible: !s.visible }));
+  }
+
+  function deleteSection(si: number) {
+    updateContent((prev) => ({
+      ...prev,
+      sections: prev.sections.filter((_, i) => i !== si),
+    }));
+  }
+
+  function moveSection(si: number, dir: -1 | 1) {
+    updateContent((prev) => {
+      const sections = [...prev.sections];
+      const target = si + dir;
+      if (target < 0 || target >= sections.length) return prev;
+      [sections[si], sections[target]] = [sections[target], sections[si]];
+      return { ...prev, sections };
+    });
+  }
+
+  function addSection(type: Section['type']) {
+    updateContent((prev) => ({
+      ...prev,
+      sections: [...prev.sections, createSection(type)],
+    }));
+  }
+
+  // --- Photo upload ---
+  async function uploadSpeakerPhoto(si: number, speakerIndex: number, file: File) {
+    const formData = new FormData();
+    formData.append('image', file);
+    try {
+      const response = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
+        method: 'POST',
+        body: formData,
+      });
+      const payload = await response.json();
+      if (!payload.success || !payload.data?.url) {
+        throw new Error(payload.error?.message || 'Не удалось загрузить');
+      }
+      updateSection(si, (s) => {
+        if (s.type !== 'speakers') return s;
+        return {
+          ...s,
+          speakers: s.speakers.map((sp, i) =>
+            i === speakerIndex ? { ...sp, photoUrl: payload.data.url } : sp
+          ),
+        };
+      });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Не удалось загрузить изображение');
+    }
+  }
+</script>
+
+<div class="page" style={themeStyle}>
+  <!-- ==================== HEADER ==================== -->
+  <header class="header">
+    <div class="header-container">
+      <nav class="nav">
+        {#each $siteContent.sections as section, si}
+          {#if section.visible}
+            {#if $isAdmin}
+              <EditableText
+                tag="span"
+                value={section.navLabel}
+                canEdit={true}
+                onchange={(v) => updateSection(si, (s) => ({ ...s, navLabel: v }))}
+              />
+            {:else}
+              <button type="button" onclick={() => scrollToSection(section.id)}>
+                {section.navLabel}
+              </button>
+            {/if}
+          {/if}
+        {/each}
+      </nav>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- ==================== HERO ==================== -->
+    <section class="hero">
+      <div class="hero-inner">
+        <div>
+          <EditableText
+            tag="p"
+            value={$siteContent.hero.label}
+            canEdit={$isAdmin}
+            className="hero-label"
+            onchange={(v) =>
+              updateContent((prev) => ({
+                ...prev,
+                hero: { ...prev.hero, label: v },
+              }))}
+          />
+          <EditableText
+            tag="h1"
+            value={$siteContent.hero.heading}
+            canEdit={$isAdmin}
+            className="hero-heading"
+            onchange={(v) =>
+              updateContent((prev) => ({
+                ...prev,
+                hero: { ...prev.hero, heading: v },
+              }))}
+          />
+          <EditableText
+            tag="p"
+            value={$siteContent.hero.subheading}
+            canEdit={$isAdmin}
+            className="hero-subheading"
+            onchange={(v) =>
+              updateContent((prev) => ({
+                ...prev,
+                hero: { ...prev.hero, subheading: v },
+              }))}
+          />
+        </div>
+        <div class="hero-actions">
+          {#if $isAdmin}
+            <EditableText
+              tag="span"
+              value={$siteContent.hero.primaryButtonText}
+              canEdit={true}
+              className="hero-btn-primary"
+              onchange={(v) =>
+                updateContent((prev) => ({
+                  ...prev,
+                  hero: { ...prev.hero, primaryButtonText: v },
+                }))}
+            />
+            <EditableText
+              tag="span"
+              value={$siteContent.hero.secondaryButtonText}
+              canEdit={true}
+              className="hero-btn-secondary"
+              onchange={(v) =>
+                updateContent((prev) => ({
+                  ...prev,
+                  hero: { ...prev.hero, secondaryButtonText: v },
+                }))}
+            />
+          {:else}
+            <button
+              type="button"
+              class="hero-btn-primary"
+              onclick={() => scrollToFirst('registration')}
+            >
+              {$siteContent.hero.primaryButtonText}
+            </button>
+            <button
+              type="button"
+              class="hero-btn-secondary"
+              onclick={() => scrollToFirst()}
+            >
+              {$siteContent.hero.secondaryButtonText}
+            </button>
+          {/if}
+        </div>
+        <div class="hero-details">
+          {#each $siteContent.hero.details as detail, di}
+            <div class="hero-detail">
+              <EditableText
+                tag="span"
+                value={detail.label}
+                canEdit={$isAdmin}
+                className="hero-detail-label"
+                onchange={(v) =>
+                  updateContent((prev) => ({
+                    ...prev,
+                    hero: {
+                      ...prev.hero,
+                      details: prev.hero.details.map((d, i) =>
+                        i === di ? { ...d, label: v } : d
+                      ),
+                    },
+                  }))}
+              />
+              <EditableText
+                tag="span"
+                value={detail.value}
+                canEdit={$isAdmin}
+                className="hero-detail-value"
+                onchange={(v) =>
+                  updateContent((prev) => ({
+                    ...prev,
+                    hero: {
+                      ...prev.hero,
+                      details: prev.hero.details.map((d, i) =>
+                        i === di ? { ...d, value: v } : d
+                      ),
+                    },
+                  }))}
+              />
+              {#if $isAdmin}
+                <button
+                  class="control-btn"
+                  style="align-self:flex-end;font-size:12px;padding:4px 8px;"
+                  onclick={() =>
+                    updateContent((prev) => ({
+                      ...prev,
+                      hero: {
+                        ...prev.hero,
+                        details: prev.hero.details.filter((_, i) => i !== di),
+                      },
+                    }))}
+                >-</button>
+              {/if}
+            </div>
+          {/each}
+          {#if $isAdmin}
+            <button
+              class="control-btn add-btn"
+              onclick={() =>
+                updateContent((prev) => ({
+                  ...prev,
+                  hero: {
+                    ...prev.hero,
+                    details: [...prev.hero.details, { label: 'Поле', value: 'Значение' }],
+                  },
+                }))}
+            >+ Поле</button>
+          {/if}
+        </div>
+      </div>
+      <div class="hero-arrow">
+        <button
+          type="button"
+          class="hero-arrow-btn"
+          onclick={() => scrollToFirst()}
+          aria-label="Прокрутить к программе"
+        >
+          <span class="hero-arrow-icon"></span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ==================== DYNAMIC SECTIONS ==================== -->
+    {#each $siteContent.sections as section, si (section.id)}
+      {#if section.visible || $isAdmin}
+        <!-- ===== PROGRAM ===== -->
+        {#if section.type === 'program'}
+          {@const sec = section as ProgramSectionData}
+          <section id={sec.id} class="section {sec.visible ? '' : 'section-hidden'}">
+            {#if $isAdmin}
+              <div class="section-admin-bar">
+                <button class="control-btn" disabled={si === 0} onclick={() => moveSection(si, -1)}>&#9650;</button>
+                <button class="control-btn" disabled={si === $siteContent.sections.length - 1} onclick={() => moveSection(si, 1)}>&#9660;</button>
+                <button class="control-btn" onclick={() => toggleVisibility(si)}>
+                  {sec.visible ? 'Скрыть раздел' : 'Показать раздел'}
+                </button>
+                <button class="control-btn" onclick={() => deleteSection(si)}>Удалить раздел</button>
+              </div>
+            {/if}
+            <EditableText
+              tag="h2"
+              value={sec.heading}
+              canEdit={$isAdmin}
+              className="section-heading"
+              onchange={(v) => updateSection(si, (s) => ({ ...s, heading: v }))}
+            />
+            <div class="program-grid">
+              {#each sec.days as day, dayIndex}
+                <div class="program-column">
+                  <EditableText
+                    tag="div"
+                    value={day.date}
+                    canEdit={$isAdmin}
+                    className="program-column-header"
+                    onchange={(v) =>
+                      updateSection(si, (s) => {
+                        if (s.type !== 'program') return s;
+                        return { ...s, days: s.days.map((d, i) => (i === dayIndex ? { ...d, date: v } : d)) };
+                      })}
+                  />
+                  <div class="program-column-body">
+                    {#each day.sessions as session, sessionIndex}
+                      <div class="session-card">
+                        <div class="session-meta">
+                          <EditableText tag="span" value={session.time} canEdit={$isAdmin} className="session-time"
+                            onchange={(v) => updateSection(si, (s) => {
+                              if (s.type !== 'program') return s;
+                              return { ...s, days: s.days.map((d, di) => di === dayIndex ? { ...d, sessions: d.sessions.map((ss, ssi) => ssi === sessionIndex ? { ...ss, time: v } : ss) } : d) };
+                            })} />
+                          <EditableText tag="span" value={session.type} canEdit={$isAdmin} className="session-type"
+                            onchange={(v) => updateSection(si, (s) => {
+                              if (s.type !== 'program') return s;
+                              return { ...s, days: s.days.map((d, di) => di === dayIndex ? { ...d, sessions: d.sessions.map((ss, ssi) => ssi === sessionIndex ? { ...ss, type: v } : ss) } : d) };
+                            })} />
+                        </div>
+                        <EditableText tag="div" value={session.title} canEdit={$isAdmin} className="session-title"
+                          onchange={(v) => updateSection(si, (s) => {
+                            if (s.type !== 'program') return s;
+                            return { ...s, days: s.days.map((d, di) => di === dayIndex ? { ...d, sessions: d.sessions.map((ss, ssi) => ssi === sessionIndex ? { ...ss, title: v } : ss) } : d) };
+                          })} />
+                        <EditableText tag="div" value={session.description} canEdit={$isAdmin} className="session-description"
+                          onchange={(v) => updateSection(si, (s) => {
+                            if (s.type !== 'program') return s;
+                            return { ...s, days: s.days.map((d, di) => di === dayIndex ? { ...d, sessions: d.sessions.map((ss, ssi) => ssi === sessionIndex ? { ...ss, description: v } : ss) } : d) };
+                          })} />
+                        {#if $isAdmin}
+                          <div class="inline-controls">
+                            <button class="control-btn" onclick={() =>
+                              updateSection(si, (s) => {
+                                if (s.type !== 'program') return s;
+                                return { ...s, days: s.days.map((d, di) => {
+                                  if (di !== dayIndex) return d;
+                                  const sessions = d.sessions.filter((_, i) => i !== sessionIndex);
+                                  return { ...d, sessions: sessions.length ? sessions : [createEmptySession()] };
+                                }) };
+                              })}>-</button>
+                          </div>
+                        {/if}
+                      </div>
+                    {/each}
+                    {#if $isAdmin}
+                      <button class="control-btn add-btn" onclick={() =>
+                        updateSection(si, (s) => {
+                          if (s.type !== 'program') return s;
+                          return { ...s, days: s.days.map((d, di) => di === dayIndex ? { ...d, sessions: [...d.sessions, createEmptySession()] } : d) };
+                        })}>+ Сессия</button>
+                    {/if}
+                  </div>
+                  {#if $isAdmin}
+                    <div class="column-controls">
+                      <button class="control-btn add-btn" onclick={() =>
+                        updateSection(si, (s) => {
+                          if (s.type !== 'program') return s;
+                          const days = [...s.days];
+                          days.splice(dayIndex + 1, 0, createEmptyDay());
+                          return { ...s, days };
+                        })}>+ День</button>
+                      <button class="control-btn" onclick={() =>
+                        updateSection(si, (s) => {
+                          if (s.type !== 'program') return s;
+                          return { ...s, days: s.days.length === 1 ? [createEmptyDay()] : s.days.filter((_, i) => i !== dayIndex) };
+                        })}>- День</button>
+                    </div>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          </section>
+
+        <!-- ===== SPEAKERS ===== -->
+        {:else if section.type === 'speakers'}
+          {@const sec = section as SpeakersSectionData}
+          <section id={sec.id} class="section {sec.visible ? '' : 'section-hidden'}">
+            {#if $isAdmin}
+              <div class="section-admin-bar">
+                <button class="control-btn" disabled={si === 0} onclick={() => moveSection(si, -1)}>&#9650;</button>
+                <button class="control-btn" disabled={si === $siteContent.sections.length - 1} onclick={() => moveSection(si, 1)}>&#9660;</button>
+                <button class="control-btn" onclick={() => toggleVisibility(si)}>
+                  {sec.visible ? 'Скрыть раздел' : 'Показать раздел'}
+                </button>
+                <button class="control-btn" onclick={() => deleteSection(si)}>Удалить раздел</button>
+              </div>
+            {/if}
+            <EditableText tag="h2" value={sec.heading} canEdit={$isAdmin} className="section-heading"
+              onchange={(v) => updateSection(si, (s) => ({ ...s, heading: v }))} />
+            <div class="speakers-grid">
+              {#each sec.speakers as speaker, spI}
+                <div class="speaker-card">
+                  <div class="speaker-photo-wrapper">
+                    {#if speaker.photoUrl}
+                      <img src={speaker.photoUrl} alt={speaker.name} class="speaker-photo-image" />
+                    {:else}
+                      <div class="speaker-photo-placeholder">Фото</div>
+                    {/if}
+                    {#if $isAdmin}
+                      <label class="speaker-photo-upload">
+                        Заменить фото
+                        <input type="file" accept="image/*" onchange={(e) => {
+                          const file = (e.target as HTMLInputElement).files?.[0];
+                          if (file) uploadSpeakerPhoto(si, spI, file);
+                          (e.target as HTMLInputElement).value = '';
+                        }} />
+                      </label>
+                    {/if}
+                  </div>
+                  <div>
+                    <EditableText tag="div" value={speaker.name} canEdit={$isAdmin} className="speaker-name"
+                      onchange={(v) => updateSection(si, (s) => {
+                        if (s.type !== 'speakers') return s;
+                        return { ...s, speakers: s.speakers.map((sp, i) => i === spI ? { ...sp, name: v } : sp) };
+                      })} />
+                    <EditableText tag="div" value={speaker.role} canEdit={$isAdmin} className="speaker-role"
+                      onchange={(v) => updateSection(si, (s) => {
+                        if (s.type !== 'speakers') return s;
+                        return { ...s, speakers: s.speakers.map((sp, i) => i === spI ? { ...sp, role: v } : sp) };
+                      })} />
+                    <EditableText tag="div" value={speaker.experience} canEdit={$isAdmin} className="speaker-experience"
+                      onchange={(v) => updateSection(si, (s) => {
+                        if (s.type !== 'speakers') return s;
+                        return { ...s, speakers: s.speakers.map((sp, i) => i === spI ? { ...sp, experience: v } : sp) };
+                      })} />
+                  </div>
+                  <EditableText tag="div" value={speaker.description} canEdit={$isAdmin} className="speaker-description"
+                    onchange={(v) => updateSection(si, (s) => {
+                      if (s.type !== 'speakers') return s;
+                      return { ...s, speakers: s.speakers.map((sp, i) => i === spI ? { ...sp, description: v } : sp) };
+                    })} />
+                  <div class="speaker-tags">
+                    {#each speaker.tags as tag, tagI}
+                      <div class="tag-row">
+                        <EditableText tag="span" value={tag} canEdit={$isAdmin} className="speaker-tag"
+                          onchange={(v) => updateSection(si, (s) => {
+                            if (s.type !== 'speakers') return s;
+                            return { ...s, speakers: s.speakers.map((sp, i) => {
+                              if (i !== spI) return sp;
+                              return { ...sp, tags: sp.tags.map((t, ti) => ti === tagI ? v : t) };
+                            }) };
+                          })} />
+                        {#if $isAdmin}
+                          <button class="control-btn" onclick={() =>
+                            updateSection(si, (s) => {
+                              if (s.type !== 'speakers') return s;
+                              return { ...s, speakers: s.speakers.map((sp, i) => {
+                                if (i !== spI) return sp;
+                                const tags = sp.tags.filter((_, ti) => ti !== tagI);
+                                return { ...sp, tags: tags.length ? tags : ['Новый тег'] };
+                              }) };
+                            })}>-</button>
+                        {/if}
+                      </div>
+                    {/each}
+                    {#if $isAdmin}
+                      <button class="control-btn add-btn" onclick={() =>
+                        updateSection(si, (s) => {
+                          if (s.type !== 'speakers') return s;
+                          return { ...s, speakers: s.speakers.map((sp, i) => i === spI ? { ...sp, tags: [...sp.tags, 'Новый тег'] } : sp) };
+                        })}>+ тег</button>
+                    {/if}
+                  </div>
+                  {#if $isAdmin}
+                    <div class="inline-controls">
+                      <button class="control-btn" onclick={() =>
+                        updateSection(si, (s) => {
+                          if (s.type !== 'speakers') return s;
+                          return { ...s, speakers: s.speakers.length === 1 ? [createEmptySpeaker()] : s.speakers.filter((_, i) => i !== spI) };
+                        })}>-</button>
+                    </div>
+                  {/if}
+                </div>
+              {/each}
+              {#if $isAdmin}
+                <button class="control-btn add-card-btn" onclick={() =>
+                  updateSection(si, (s) => {
+                    if (s.type !== 'speakers') return s;
+                    return { ...s, speakers: [...s.speakers, createEmptySpeaker()] };
+                  })}>+ Спикер</button>
+              {/if}
+            </div>
+          </section>
+
+        <!-- ===== PRICING ===== -->
+        {:else if section.type === 'pricing'}
+          {@const sec = section as PricingSectionData}
+          <section id={sec.id} class="section {sec.visible ? '' : 'section-hidden'}">
+            {#if $isAdmin}
+              <div class="section-admin-bar">
+                <button class="control-btn" disabled={si === 0} onclick={() => moveSection(si, -1)}>&#9650;</button>
+                <button class="control-btn" disabled={si === $siteContent.sections.length - 1} onclick={() => moveSection(si, 1)}>&#9660;</button>
+                <button class="control-btn" onclick={() => toggleVisibility(si)}>
+                  {sec.visible ? 'Скрыть раздел' : 'Показать раздел'}
+                </button>
+                <button class="control-btn" onclick={() => deleteSection(si)}>Удалить раздел</button>
+              </div>
+            {/if}
+            <EditableText tag="h2" value={sec.heading} canEdit={$isAdmin} className="section-heading"
+              onchange={(v) => updateSection(si, (s) => ({ ...s, heading: v }))} />
+            <div class="pricing-grid">
+              {#each sec.options as option, optI}
+                <div class="price-card {option.highlight ? 'highlight' : ''}">
+                  {#if option.label || $isAdmin}
+                    <EditableText tag="span" value={option.label ?? ''} canEdit={$isAdmin} className="price-badge"
+                      onchange={(v) => updateSection(si, (s) => {
+                        if (s.type !== 'pricing') return s;
+                        return { ...s, options: s.options.map((o, i) => i === optI ? { ...o, label: v || undefined } : o) };
+                      })} />
+                  {/if}
+                  <EditableText tag="span" value={option.period} canEdit={$isAdmin} className="price-period"
+                    onchange={(v) => updateSection(si, (s) => {
+                      if (s.type !== 'pricing') return s;
+                      return { ...s, options: s.options.map((o, i) => i === optI ? { ...o, period: v } : o) };
+                    })} />
+                  <EditableText tag="span" value={option.price} canEdit={$isAdmin} className="price-value"
+                    onchange={(v) => updateSection(si, (s) => {
+                      if (s.type !== 'pricing') return s;
+                      return { ...s, options: s.options.map((o, i) => i === optI ? { ...o, price: v } : o) };
+                    })} />
+                  <div class="price-features">
+                    {#each option.features as feature, fI}
+                      <div class="feature-row">
+                        <EditableText tag="span" value={'• ' + feature} canEdit={$isAdmin}
+                          onchange={(v) => updateSection(si, (s) => {
+                            if (s.type !== 'pricing') return s;
+                            const cleaned = v.replace(/^•\s*/, '');
+                            return { ...s, options: s.options.map((o, i) => {
+                              if (i !== optI) return o;
+                              return { ...o, features: o.features.map((f, fi) => fi === fI ? cleaned : f) };
+                            }) };
+                          })} />
+                        {#if $isAdmin}
+                          <button class="control-btn" onclick={() =>
+                            updateSection(si, (s) => {
+                              if (s.type !== 'pricing') return s;
+                              return { ...s, options: s.options.map((o, i) => {
+                                if (i !== optI) return o;
+                                const features = o.features.filter((_, fi) => fi !== fI);
+                                return { ...o, features: features.length ? features : ['Новое преимущество'] };
+                              }) };
+                            })}>-</button>
+                        {/if}
+                      </div>
+                    {/each}
+                    {#if $isAdmin}
+                      <button class="control-btn add-btn" onclick={() =>
+                        updateSection(si, (s) => {
+                          if (s.type !== 'pricing') return s;
+                          return { ...s, options: s.options.map((o, i) => i === optI ? { ...o, features: [...o.features, 'Новое преимущество'] } : o) };
+                        })}>+</button>
+                    {/if}
+                  </div>
+                  {#if $isAdmin}
+                    <div class="inline-controls">
+                      <button class="control-btn" onclick={() =>
+                        updateSection(si, (s) => {
+                          if (s.type !== 'pricing') return s;
+                          return { ...s, options: s.options.length === 1 ? [createEmptyPricingOption()] : s.options.filter((_, i) => i !== optI) };
+                        })}>-</button>
+                    </div>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+            {#if $isAdmin}
+              <button class="control-btn add-card-btn" onclick={() =>
+                updateSection(si, (s) => {
+                  if (s.type !== 'pricing') return s;
+                  return { ...s, options: [...s.options, createEmptyPricingOption()] };
+                })}>+ Тариф</button>
+            {/if}
+          </section>
+
+        <!-- ===== REGISTRATION ===== -->
+        {:else if section.type === 'registration'}
+          {@const sec = section as RegistrationSectionData}
+          <section id={sec.id} class="section {sec.visible ? '' : 'section-hidden'}">
+            {#if $isAdmin}
+              <div class="section-admin-bar">
+                <button class="control-btn" disabled={si === 0} onclick={() => moveSection(si, -1)}>&#9650;</button>
+                <button class="control-btn" disabled={si === $siteContent.sections.length - 1} onclick={() => moveSection(si, 1)}>&#9660;</button>
+                <button class="control-btn" onclick={() => toggleVisibility(si)}>
+                  {sec.visible ? 'Скрыть раздел' : 'Показать раздел'}
+                </button>
+                <button class="control-btn" onclick={() => deleteSection(si)}>Удалить раздел</button>
+              </div>
+            {/if}
+            <EditableText tag="h2" value={sec.heading} canEdit={$isAdmin} className="section-heading"
+              onchange={(v) => updateSection(si, (s) => ({ ...s, heading: v }))} />
+            <div class="registration-steps">
+              {#each sec.steps as step, stepI}
+                <div class="registration-step">
+                  <div class="registration-step-header">
+                    <span class="registration-step-number">{stepI + 1}</span>
+                    <EditableText
+                      tag="span"
+                      value={step.text}
+                      canEdit={$isAdmin}
+                      className={step.emphasis ? 'registration-step-text-emphasis' : ''}
+                      onchange={(v) =>
+                        updateSection(si, (s) => {
+                          if (s.type !== 'registration') return s;
+                          return { ...s, steps: s.steps.map((st, i) => (i === stepI ? { ...st, text: v } : st)) };
+                        })}
+                    />
+                  </div>
+                  {#if $isAdmin}
+                    <div class="inline-controls">
+                      <button class="control-btn" onclick={() =>
+                        updateSection(si, (s) => {
+                          if (s.type !== 'registration') return s;
+                          const steps = s.steps.filter((_, i) => i !== stepI);
+                          return { ...s, steps: steps.length ? steps : [{ text: 'Новый шаг' }] };
+                        })}>-</button>
+                    </div>
+                  {/if}
+                </div>
+              {/each}
+              {#if $isAdmin}
+                <button class="control-btn add-btn" onclick={() =>
+                  updateSection(si, (s) => {
+                    if (s.type !== 'registration') return s;
+                    return { ...s, steps: [...s.steps, { text: 'Новый шаг' }] };
+                  })}>+ Шаг</button>
+              {/if}
+            </div>
+            <div class="registration-btn-container">
+              {#if $isAdmin}
+                <EditableText tag="span" value={sec.buttonText} canEdit={true} className="registration-btn"
+                  onchange={(v) => updateSection(si, (s) => ({ ...s, buttonText: v }))} />
+                <div class="url-edit">
+                  <input
+                    type="text"
+                    value={sec.buttonUrl}
+                    placeholder="URL ссылки"
+                    oninput={(e) => {
+                      const val = (e.target as HTMLInputElement).value;
+                      updateSection(si, (s) => ({ ...s, buttonUrl: val }));
+                    }}
+                  />
+                </div>
+              {:else}
+                <a href={sec.buttonUrl} target="_blank" rel="noopener noreferrer" class="registration-btn">
+                  {sec.buttonText}
+                </a>
+              {/if}
+            </div>
+            <div class="registration-notifications">
+              <EditableText tag="h3" value={sec.notifications.title} canEdit={$isAdmin} className="registration-notifications-title"
+                onchange={(v) => updateSection(si, (s) => {
+                  if (s.type !== 'registration') return s;
+                  return { ...s, notifications: { ...s.notifications, title: v } };
+                })} />
+              <div class="registration-notifications-list">
+                {#each sec.notifications.items as item, itemI}
+                  <div class="notification-row">
+                    <EditableText tag="p" value={'• ' + item} canEdit={$isAdmin}
+                      onchange={(v) => updateSection(si, (s) => {
+                        if (s.type !== 'registration') return s;
+                        const cleaned = v.replace(/^•\s*/, '');
+                        return { ...s, notifications: { ...s.notifications, items: s.notifications.items.map((it, i) => i === itemI ? cleaned : it) } };
+                      })} />
+                    {#if $isAdmin}
+                      <button class="control-btn" onclick={() =>
+                        updateSection(si, (s) => {
+                          if (s.type !== 'registration') return s;
+                          const items = s.notifications.items.filter((_, i) => i !== itemI);
+                          return { ...s, notifications: { ...s.notifications, items: items.length ? items : ['Новый пункт'] } };
+                        })}>-</button>
+                    {/if}
+                  </div>
+                {/each}
+                {#if $isAdmin}
+                  <button class="control-btn add-btn" onclick={() =>
+                    updateSection(si, (s) => {
+                      if (s.type !== 'registration') return s;
+                      return { ...s, notifications: { ...s.notifications, items: [...s.notifications.items, 'Новый пункт'] } };
+                    })}>+</button>
+                {/if}
+              </div>
+            </div>
+            <div class="contact-section">
+              <EditableText tag="h3" value={sec.contact.title} canEdit={$isAdmin} className="contact-section-title"
+                onchange={(v) => updateSection(si, (s) => {
+                  if (s.type !== 'registration') return s;
+                  return { ...s, contact: { ...s.contact, title: v } };
+                })} />
+              <div class="contact-info">
+                <a
+                  href={sec.contact.phone ? `tel:${sec.contact.phone.replace(/[^\d+]/g, '')}` : undefined}
+                  class="contact-item contact-link"
+                  onclick={(e) => { if ($isAdmin) e.preventDefault(); }}
+                >
+                  <EditableText tag="span" value={sec.contact.phone} canEdit={$isAdmin} className="contact-text contact-phone"
+                    onchange={(v) => updateSection(si, (s) => {
+                      if (s.type !== 'registration') return s;
+                      return { ...s, contact: { ...s.contact, phone: v } };
+                    })} />
+                </a>
+                <a
+                  href={sec.contact.email ? `mailto:${sec.contact.email}` : undefined}
+                  class="contact-item contact-link"
+                  onclick={(e) => { if ($isAdmin) e.preventDefault(); }}
+                >
+                  <EditableText tag="span" value={sec.contact.email} canEdit={$isAdmin} className="contact-text contact-email"
+                    onchange={(v) => updateSection(si, (s) => {
+                      if (s.type !== 'registration') return s;
+                      return { ...s, contact: { ...s.contact, email: v } };
+                    })} />
+                </a>
+              </div>
+            </div>
+          </section>
+
+        <!-- ===== TEXT ===== -->
+        {:else if section.type === 'text'}
+          {@const sec = section as TextSectionData}
+          <section id={sec.id} class="section {sec.visible ? '' : 'section-hidden'}">
+            {#if $isAdmin}
+              <div class="section-admin-bar">
+                <button class="control-btn" disabled={si === 0} onclick={() => moveSection(si, -1)}>&#9650;</button>
+                <button class="control-btn" disabled={si === $siteContent.sections.length - 1} onclick={() => moveSection(si, 1)}>&#9660;</button>
+                <button class="control-btn" onclick={() => toggleVisibility(si)}>
+                  {sec.visible ? 'Скрыть раздел' : 'Показать раздел'}
+                </button>
+                <button class="control-btn" onclick={() => deleteSection(si)}>Удалить раздел</button>
+              </div>
+            {/if}
+            <EditableText tag="h2" value={sec.heading} canEdit={$isAdmin} className="section-heading"
+              onchange={(v) => updateSection(si, (s) => ({ ...s, heading: v }))} />
+            <EditableText tag="div" value={sec.body} canEdit={$isAdmin} className="text-section-body"
+              onchange={(v) => updateSection(si, (s) => {
+                if (s.type !== 'text') return s;
+                return { ...s, body: v };
+              })} />
+          </section>
+        {/if}
+      {/if}
+    {/each}
+
+    <!-- ===== ADD SECTION ===== -->
+    {#if $isAdmin}
+      <div class="add-section-area">
+        <span class="add-section-label">Добавить раздел:</span>
+        <button class="control-btn" onclick={() => addSection('program')}>Программа</button>
+        <button class="control-btn" onclick={() => addSection('speakers')}>Спикеры</button>
+        <button class="control-btn" onclick={() => addSection('pricing')}>Цены</button>
+        <button class="control-btn" onclick={() => addSection('registration')}>Регистрация</button>
+        <button class="control-btn" onclick={() => addSection('text')}>Текст</button>
+      </div>
+    {/if}
+  </div>
+
+  <!-- ==================== FOOTER ==================== -->
+  <footer class="footer">
+    <div class="footer-container">
+      <div class="footer-content">
+        <EditableText tag="p" value={$siteContent.footerText} canEdit={$isAdmin}
+          onchange={(v) => updateContent((prev) => ({ ...prev, footerText: v }))} />
+      </div>
+      <div class="footer-actions">
+        {#if $isAdmin}
+          <div class="color-picker-wrapper">
+            <label class="color-picker-label">
+              Цвет темы
+              <input
+                type="color"
+                value={$siteContent.primaryColor}
+                oninput={(e) => {
+                  const val = (e.target as HTMLInputElement).value;
+                  updateContent((prev) => ({ ...prev, primaryColor: val }));
+                }}
+              />
+            </label>
+          </div>
+          <button type="button" class="login-btn" onclick={handleLogout}>Выйти</button>
+        {:else}
+          <button type="button" class="login-btn" onclick={handleOpenLogin}>
+            Войти как администратор
+          </button>
+        {/if}
+      </div>
+      <EditableText tag="p" value={$siteContent.footerNote} canEdit={$isAdmin} className="footer-note"
+        onchange={(v) => updateContent((prev) => ({ ...prev, footerNote: v }))} />
+    </div>
+  </footer>
+
+  <!-- ==================== LOGIN MODAL ==================== -->
+  {#if isLoginModalOpen}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="modal-overlay" onclick={handleCloseLogin}>
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="modal-content" onclick={(e) => e.stopPropagation()}>
+        <button type="button" class="modal-close" onclick={handleCloseLogin}>x</button>
+        <h3 class="modal-title">Вход администратора</h3>
+        <form class="modal-form" onsubmit={handleLoginSubmit}>
+          <label class="modal-label">
+            Логин
+            <input type="text" class="modal-input" bind:value={loginField} />
+          </label>
+          <label class="modal-label">
+            Пароль
+            <input type="password" class="modal-input" bind:value={passwordField} />
+          </label>
+          {#if loginError}
+            <div class="modal-error">{loginError}</div>
+          {/if}
+          <button type="submit" class="modal-submit">Войти</button>
+        </form>
+      </div>
+    </div>
+  {/if}
+
+  <!-- ==================== TOAST ==================== -->
+  {#if $contentStatus !== 'idle'}
+    <div class="toast">
+      {#if $contentStatus === 'loading'}Загрузка данных...{/if}
+      {#if $contentStatus === 'saving'}Сохранение...{/if}
+      {#if $contentStatus === 'error'}{$contentError ?? 'Произошла ошибка'}{/if}
+    </div>
+  {/if}
+</div>
