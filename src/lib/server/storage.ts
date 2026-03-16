@@ -1,20 +1,36 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
+import { createClient } from '@libsql/client';
 import { defaultContent, type SiteContent } from '$lib/content';
+import { env } from '$env/dynamic/private';
 
-const DATA_PATH = join(process.cwd(), 'data', 'content.json');
+const db = createClient({
+  url: env.TURSO_DB_URL || 'file:local.db',
+  authToken: env.TURSO_DB_AUTH_TOKEN,
+});
 
-export function readContent(): SiteContent {
+let initialized = false;
+
+async function init() {
+  if (initialized) return;
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS content (
+      id TEXT PRIMARY KEY DEFAULT 'main',
+      data TEXT NOT NULL
+    )
+  `);
+  initialized = true;
+}
+
+export async function readContent(): Promise<SiteContent> {
   try {
-    if (!existsSync(DATA_PATH)) {
-      writeContent(defaultContent);
+    await init();
+    const result = await db.execute(`SELECT data FROM content WHERE id = 'main'`);
+    if (result.rows.length === 0) {
+      await writeContent(defaultContent);
       return structuredClone(defaultContent);
     }
-    const raw = readFileSync(DATA_PATH, 'utf-8');
-    const parsed = JSON.parse(raw);
-    // Migration: if old format (no sections array), reset to default
+    const parsed = JSON.parse(result.rows[0].data as string);
     if (!parsed.sections || !Array.isArray(parsed.sections)) {
-      writeContent(defaultContent);
+      await writeContent(defaultContent);
       return structuredClone(defaultContent);
     }
     return parsed as SiteContent;
@@ -23,11 +39,12 @@ export function readContent(): SiteContent {
   }
 }
 
-export function writeContent(content: SiteContent): SiteContent {
-  const dir = dirname(DATA_PATH);
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-  }
-  writeFileSync(DATA_PATH, JSON.stringify(content, null, 2), 'utf-8');
+export async function writeContent(content: SiteContent): Promise<SiteContent> {
+  await init();
+  const json = JSON.stringify(content);
+  await db.execute({
+    sql: `INSERT OR REPLACE INTO content (id, data) VALUES ('main', ?)`,
+    args: [json],
+  });
   return content;
 }
