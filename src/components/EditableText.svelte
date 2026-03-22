@@ -4,10 +4,11 @@
     value: string;
     canEdit: boolean;
     className?: string;
+    style?: string;
     onchange: (value: string) => void;
   }
 
-  let { tag = 'span', value, canEdit, className = '', onchange }: Props = $props();
+  let { tag = 'span', value, canEdit, className = '', style = '', onchange }: Props = $props();
 
   let isEditing = $state(false);
   let initialValue = $state(value);
@@ -79,6 +80,7 @@
   this={tag}
   bind:this={element}
   class="{className} {canEdit ? 'editable' : ''} {isEditing ? 'editing' : ''}"
+  style={style || undefined}
   contenteditable={isEditing}
   onclick={enableEditing}
   onblur={handleBlur}

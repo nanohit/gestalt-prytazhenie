@@ -255,6 +255,181 @@ body {
   margin-top: -4px;
 }
 
+/* ==================== HERO IMAGES ==================== */
+.hero-images {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.hero-image-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.hero-image-img {
+  display: block;
+  height: 80px;
+  width: auto;
+  object-fit: contain;
+  background: transparent;
+}
+
+.hero-image-controls {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.hero-image-ctrl {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: none;
+  background: rgba(var(--c-rgb), 0.15);
+  color: var(--c);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  padding: 0;
+}
+
+.hero-image-ctrl:hover:not(:disabled) {
+  background: rgba(var(--c-rgb), 0.3);
+}
+
+.hero-image-ctrl:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.hero-image-remove {
+  background: rgba(200, 50, 50, 0.18);
+  color: #c33;
+}
+
+.hero-image-remove:hover {
+  background: rgba(200, 50, 50, 0.35);
+}
+
+.section-image-upload {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: rgba(var(--c-rgb), 0.12);
+  color: var(--c);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  align-self: center;
+}
+
+.section-image-upload:hover {
+  background: rgba(var(--c-rgb), 0.22);
+}
+
+.section-image-upload input {
+  display: none;
+}
+
+/* ==================== HERO DETAIL LIST ==================== */
+.hero-detail-list {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 20px;
+  font-weight: 600;
+  color: #14343f;
+  line-height: 1.5;
+}
+
+.hero-detail-list li {
+  display: flex;
+  align-items: center;
+}
+
+.hero-detail-list li::before {
+  content: "\2022";
+  color: var(--c);
+  font-weight: 700;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+.hero-detail-admin {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-end;
+}
+
+.hero-detail-list-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #8a9ba3;
+  cursor: pointer;
+  user-select: none;
+}
+
+.hero-detail-list-toggle input[type="checkbox"] {
+  cursor: pointer;
+}
+
+/* ==================== BUTTON COLOR PICKER ==================== */
+.btn-color-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #8a9ba3;
+}
+
+.btn-color-picker input[type="color"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(var(--c-rgb), 0.25);
+  border-radius: 6px;
+  cursor: pointer;
+  background: none;
+  padding: 0;
+}
+
+.btn-color-picker input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.btn-color-picker input[type="color"]::-webkit-color-swatch {
+  border: none;
+  border-radius: 3px;
+}
+
+.btn-color-reset {
+  border: none;
+  background: none;
+  color: #8a9ba3;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+  text-decoration: underline;
+}
+
 /* ==================== SECTIONS ==================== */
 .section {
   padding: 0 0 120px;

@@ -22,9 +22,10 @@
     type PricingSectionData,
     type RegistrationSectionData,
     type TextSectionData,
+    type HeroImage,
   } from '$lib/content';
 
-  const IMGBB_API_KEY = 'dea282c8a3ed6b4d82eed4ea65ab3826';
+  const IMGBB_API_KEY = 'd74efd2fa75705b574e66c040fabe113';
   const ADMIN_LOGIN = 'admin';
   const ADMIN_PASSWORD = '123456789';
   const STORAGE_KEY = 'gestalt-admin-auth';
@@ -147,6 +148,62 @@
       alert(err instanceof Error ? err.message : 'Не удалось загрузить изображение');
     }
   }
+
+  // --- Hero image upload ---
+  async function uploadHeroImage(file: File) {
+    const formData = new FormData();
+    formData.append('image', file);
+    try {
+      const response = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
+        method: 'POST',
+        body: formData,
+      });
+      const payload = await response.json();
+      if (!payload.success || !payload.data?.url) {
+        throw new Error(payload.error?.message || 'Не удалось загрузить');
+      }
+      const newImg: HeroImage = { url: payload.data.url, scale: 1 };
+      updateContent((prev) => ({
+        ...prev,
+        hero: { ...prev.hero, images: [...(prev.hero.images || []), newImg] },
+      }));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Не удалось загрузить изображение');
+    }
+  }
+
+  function removeHeroImage(imgIndex: number) {
+    updateContent((prev) => ({
+      ...prev,
+      hero: { ...prev.hero, images: (prev.hero.images || []).filter((_, i) => i !== imgIndex) },
+    }));
+  }
+
+  function moveHeroImage(imgIndex: number, dir: -1 | 1) {
+    updateContent((prev) => {
+      const images = [...(prev.hero.images || [])];
+      const target = imgIndex + dir;
+      if (target < 0 || target >= images.length) return prev;
+      [images[imgIndex], images[target]] = [images[target], images[imgIndex]];
+      return { ...prev, hero: { ...prev.hero, images } };
+    });
+  }
+
+  function scaleHeroImage(imgIndex: number, delta: number) {
+    updateContent((prev) => {
+      const images = (prev.hero.images || []).map((img, i) => {
+        if (i !== imgIndex) return img;
+        const newScale = Math.max(0.3, Math.min(3, img.scale + delta));
+        return { ...img, scale: newScale };
+      });
+      return { ...prev, hero: { ...prev.hero, images } };
+    });
+  }
+
+  function btnGradient(color: string | undefined): string {
+    if (!color) return '';
+    return `background: ${color}; box-shadow: 0 16px 40px ${color}55;`;
+  }
 </script>
 
 <div class="page" style={themeStyle}>
@@ -178,6 +235,34 @@
     <!-- ==================== HERO ==================== -->
     <section class="hero">
       <div class="hero-inner">
+        {#if ($siteContent.hero.images && $siteContent.hero.images.length > 0) || $isAdmin}
+          <div class="hero-images">
+            {#each $siteContent.hero.images || [] as img, imgI}
+              <div class="hero-image-item">
+                <img src={img.url} alt="" class="hero-image-img" style="height: {img.scale * 80}px;" />
+                {#if $isAdmin}
+                  <div class="hero-image-controls">
+                    <button class="hero-image-ctrl" disabled={imgI === 0} onclick={() => moveHeroImage(imgI, -1)}>&#9664;</button>
+                    <button class="hero-image-ctrl" onclick={() => scaleHeroImage(imgI, -0.15)}>-</button>
+                    <button class="hero-image-ctrl" onclick={() => scaleHeroImage(imgI, 0.15)}>+</button>
+                    <button class="hero-image-ctrl" disabled={imgI === ($siteContent.hero.images || []).length - 1} onclick={() => moveHeroImage(imgI, 1)}>&#9654;</button>
+                    <button class="hero-image-ctrl hero-image-remove" onclick={() => removeHeroImage(imgI)}>x</button>
+                  </div>
+                {/if}
+              </div>
+            {/each}
+            {#if $isAdmin && ($siteContent.hero.images || []).length < 5}
+              <label class="section-image-upload">
+                + Лого
+                <input type="file" accept="image/*" onchange={(e) => {
+                  const file = (e.target as HTMLInputElement).files?.[0];
+                  if (file) uploadHeroImage(file);
+                  (e.target as HTMLInputElement).value = '';
+                }} />
+              </label>
+            {/if}
+          </div>
+        {/if}
         <div>
           <EditableText
             tag="p"
@@ -215,32 +300,65 @@
         </div>
         <div class="hero-actions">
           {#if $isAdmin}
-            <EditableText
-              tag="span"
-              value={$siteContent.hero.primaryButtonText}
-              canEdit={true}
-              className="hero-btn-primary"
-              onchange={(v) =>
-                updateContent((prev) => ({
-                  ...prev,
-                  hero: { ...prev.hero, primaryButtonText: v },
-                }))}
-            />
-            <EditableText
-              tag="span"
-              value={$siteContent.hero.secondaryButtonText}
-              canEdit={true}
-              className="hero-btn-secondary"
-              onchange={(v) =>
-                updateContent((prev) => ({
-                  ...prev,
-                  hero: { ...prev.hero, secondaryButtonText: v },
-                }))}
-            />
+            <div>
+              <EditableText
+                tag="span"
+                value={$siteContent.hero.primaryButtonText}
+                canEdit={true}
+                className="hero-btn-primary"
+                style={btnGradient($siteContent.hero.primaryButtonColor)}
+                onchange={(v) =>
+                  updateContent((prev) => ({
+                    ...prev,
+                    hero: { ...prev.hero, primaryButtonText: v },
+                  }))}
+              />
+              <div class="btn-color-picker">
+                <input type="color" value={$siteContent.hero.primaryButtonColor || $siteContent.primaryColor}
+                  oninput={(e) => updateContent((prev) => ({
+                    ...prev,
+                    hero: { ...prev.hero, primaryButtonColor: (e.target as HTMLInputElement).value },
+                  }))} />
+                {#if $siteContent.hero.primaryButtonColor}
+                  <button class="btn-color-reset" onclick={() => updateContent((prev) => ({
+                    ...prev,
+                    hero: { ...prev.hero, primaryButtonColor: undefined },
+                  }))}>сброс</button>
+                {/if}
+              </div>
+            </div>
+            <div>
+              <EditableText
+                tag="span"
+                value={$siteContent.hero.secondaryButtonText}
+                canEdit={true}
+                className="hero-btn-secondary"
+                style={$siteContent.hero.secondaryButtonColor ? `color: ${$siteContent.hero.secondaryButtonColor}; border-color: ${$siteContent.hero.secondaryButtonColor}44;` : ''}
+                onchange={(v) =>
+                  updateContent((prev) => ({
+                    ...prev,
+                    hero: { ...prev.hero, secondaryButtonText: v },
+                  }))}
+              />
+              <div class="btn-color-picker">
+                <input type="color" value={$siteContent.hero.secondaryButtonColor || $siteContent.primaryColor}
+                  oninput={(e) => updateContent((prev) => ({
+                    ...prev,
+                    hero: { ...prev.hero, secondaryButtonColor: (e.target as HTMLInputElement).value },
+                  }))} />
+                {#if $siteContent.hero.secondaryButtonColor}
+                  <button class="btn-color-reset" onclick={() => updateContent((prev) => ({
+                    ...prev,
+                    hero: { ...prev.hero, secondaryButtonColor: undefined },
+                  }))}>сброс</button>
+                {/if}
+              </div>
+            </div>
           {:else}
             <button
               type="button"
               class="hero-btn-primary"
+              style={btnGradient($siteContent.hero.primaryButtonColor)}
               onclick={() => scrollToFirst('registration')}
             >
               {$siteContent.hero.primaryButtonText}
@@ -248,6 +366,7 @@
             <button
               type="button"
               class="hero-btn-secondary"
+              style={$siteContent.hero.secondaryButtonColor ? `color: ${$siteContent.hero.secondaryButtonColor}; border-color: ${$siteContent.hero.secondaryButtonColor}44;` : ''}
               onclick={() => scrollToFirst()}
             >
               {$siteContent.hero.secondaryButtonText}
@@ -273,35 +392,94 @@
                     },
                   }))}
               />
-              <EditableText
-                tag="span"
-                value={detail.value}
-                canEdit={$isAdmin}
-                className="hero-detail-value"
-                onchange={(v) =>
-                  updateContent((prev) => ({
-                    ...prev,
-                    hero: {
-                      ...prev.hero,
-                      details: prev.hero.details.map((d, i) =>
-                        i === di ? { ...d, value: v } : d
-                      ),
-                    },
-                  }))}
-              />
-              {#if $isAdmin}
-                <button
-                  class="control-btn"
-                  style="align-self:flex-end;font-size:12px;padding:4px 8px;"
-                  onclick={() =>
+              {#if detail.isList}
+                <ul class="hero-detail-list">
+                  {#each detail.value.split('\n').filter(Boolean) as line, lineI}
+                    <li>
+                      {#if $isAdmin}
+                        <EditableText tag="span" value={line} canEdit={true}
+                          onchange={(v) => {
+                            const lines = detail.value.split('\n').filter(Boolean);
+                            lines[lineI] = v;
+                            updateContent((prev) => ({
+                              ...prev,
+                              hero: { ...prev.hero, details: prev.hero.details.map((d, i) => i === di ? { ...d, value: lines.join('\n') } : d) },
+                            }));
+                          }} />
+                        <button class="control-btn" style="font-size:11px;padding:2px 6px;margin-left:4px;"
+                          onclick={() => {
+                            const lines = detail.value.split('\n').filter(Boolean).filter((_, i) => i !== lineI);
+                            updateContent((prev) => ({
+                              ...prev,
+                              hero: { ...prev.hero, details: prev.hero.details.map((d, i) => i === di ? { ...d, value: lines.length ? lines.join('\n') : 'Пункт' } : d) },
+                            }));
+                          }}>-</button>
+                      {:else}
+                        {line}
+                      {/if}
+                    </li>
+                  {/each}
+                </ul>
+                {#if $isAdmin}
+                  <button class="control-btn add-btn" style="font-size:12px;padding:4px 10px;"
+                    onclick={() => {
+                      const lines = detail.value.split('\n').filter(Boolean);
+                      lines.push('Новый пункт');
+                      updateContent((prev) => ({
+                        ...prev,
+                        hero: { ...prev.hero, details: prev.hero.details.map((d, i) => i === di ? { ...d, value: lines.join('\n') } : d) },
+                      }));
+                    }}>+ пункт</button>
+                {/if}
+              {:else}
+                <EditableText
+                  tag="span"
+                  value={detail.value}
+                  canEdit={$isAdmin}
+                  className="hero-detail-value"
+                  onchange={(v) =>
                     updateContent((prev) => ({
                       ...prev,
                       hero: {
                         ...prev.hero,
-                        details: prev.hero.details.filter((_, i) => i !== di),
+                        details: prev.hero.details.map((d, i) =>
+                          i === di ? { ...d, value: v } : d
+                        ),
                       },
                     }))}
-                >-</button>
+                />
+              {/if}
+              {#if $isAdmin}
+                <div class="hero-detail-admin">
+                  <label class="hero-detail-list-toggle">
+                    <input type="checkbox" checked={detail.isList || false}
+                      onchange={(e) => {
+                        const checked = (e.target as HTMLInputElement).checked;
+                        updateContent((prev) => ({
+                          ...prev,
+                          hero: {
+                            ...prev.hero,
+                            details: prev.hero.details.map((d, i) =>
+                              i === di ? { ...d, isList: checked } : d
+                            ),
+                          },
+                        }));
+                      }} />
+                    список
+                  </label>
+                  <button
+                    class="control-btn"
+                    style="font-size:12px;padding:4px 8px;"
+                    onclick={() =>
+                      updateContent((prev) => ({
+                        ...prev,
+                        hero: {
+                          ...prev.hero,
+                          details: prev.hero.details.filter((_, i) => i !== di),
+                        },
+                      }))}
+                  >-</button>
+                </div>
               {/if}
             </div>
           {/each}
@@ -696,7 +874,15 @@
             <div class="registration-btn-container">
               {#if $isAdmin}
                 <EditableText tag="span" value={sec.buttonText} canEdit={true} className="registration-btn"
+                  style={btnGradient(sec.buttonColor)}
                   onchange={(v) => updateSection(si, (s) => ({ ...s, buttonText: v }))} />
+                <div class="btn-color-picker">
+                  <input type="color" value={sec.buttonColor || $siteContent.primaryColor}
+                    oninput={(e) => updateSection(si, (s) => ({ ...s, buttonColor: (e.target as HTMLInputElement).value }))} />
+                  {#if sec.buttonColor}
+                    <button class="btn-color-reset" onclick={() => updateSection(si, (s) => ({ ...s, buttonColor: undefined }))}>сброс</button>
+                  {/if}
+                </div>
                 <div class="url-edit">
                   <input
                     type="text"
@@ -709,7 +895,8 @@
                   />
                 </div>
               {:else}
-                <a href={sec.buttonUrl} target="_blank" rel="noopener noreferrer" class="registration-btn">
+                <a href={sec.buttonUrl} target="_blank" rel="noopener noreferrer" class="registration-btn"
+                  style={btnGradient(sec.buttonColor)}>
                   {sec.buttonText}
                 </a>
               {/if}

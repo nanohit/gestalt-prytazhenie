@@ -41,6 +41,12 @@ export type ContactSection = {
 export type HeroDetail = {
   label: string;
   value: string;
+  isList?: boolean;
+};
+
+export type HeroImage = {
+  url: string;
+  scale: number;
 };
 
 type SectionBase = {
@@ -70,6 +76,7 @@ export type RegistrationSectionData = SectionBase & {
   steps: { text: string; emphasis?: boolean }[];
   buttonText: string;
   buttonUrl: string;
+  buttonColor?: string;
   notifications: RegistrationNotifications;
   contact: ContactSection;
 };
@@ -89,11 +96,14 @@ export type Section =
 export type SiteContent = {
   primaryColor: string;
   hero: {
+    images?: HeroImage[];
     label: string;
     heading: string;
     subheading: string;
     primaryButtonText: string;
+    primaryButtonColor?: string;
     secondaryButtonText: string;
+    secondaryButtonColor?: string;
     details: HeroDetail[];
   };
   sections: Section[];
