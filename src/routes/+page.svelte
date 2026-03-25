@@ -22,6 +22,7 @@
     type PricingSectionData,
     type RegistrationSectionData,
     type TextSectionData,
+    type AccordionSectionData,
     type HeroImage,
   } from '$lib/content';
 
@@ -990,6 +991,76 @@
                 return { ...s, body: v };
               })} />
           </section>
+
+        <!-- ===== ACCORDION ===== -->
+        {:else if section.type === 'accordion'}
+          {@const sec = section as AccordionSectionData}
+          <section id={sec.id} class="section {sec.visible ? '' : 'section-hidden'}">
+            {#if $isAdmin}
+              <div class="section-admin-bar">
+                <button class="control-btn" disabled={si === 0} onclick={() => moveSection(si, -1)}>&#9650;</button>
+                <button class="control-btn" disabled={si === $siteContent.sections.length - 1} onclick={() => moveSection(si, 1)}>&#9660;</button>
+                <button class="control-btn" onclick={() => toggleVisibility(si)}>
+                  {sec.visible ? 'Скрыть раздел' : 'Показать раздел'}
+                </button>
+                <button class="control-btn" onclick={() => deleteSection(si)}>Удалить раздел</button>
+              </div>
+            {/if}
+            <EditableText tag="h2" value={sec.heading} canEdit={$isAdmin} className="section-heading"
+              onchange={(v) => updateSection(si, (s) => ({ ...s, heading: v }))} />
+            <div class="accordion-list">
+              {#each sec.items as item, itemI}
+                <div class="accordion-item">
+                  <button
+                    type="button"
+                    class="accordion-trigger"
+                    onclick={(e) => {
+                      const el = (e.currentTarget as HTMLElement).closest('.accordion-item');
+                      el?.classList.toggle('open');
+                    }}
+                  >
+                    {#if $isAdmin}
+                      <!-- svelte-ignore a11y_click_events_have_key_events -->
+                      <!-- svelte-ignore a11y_no_static_element_interactions -->
+                      <span class="accordion-title-edit" onclick={(e) => e.stopPropagation()}>
+                        <EditableText tag="span" value={item.title} canEdit={true}
+                          onchange={(v) => updateSection(si, (s) => {
+                            if (s.type !== 'accordion') return s;
+                            return { ...s, items: s.items.map((it, i) => i === itemI ? { ...it, title: v } : it) };
+                          })} />
+                      </span>
+                    {:else}
+                      <span class="accordion-title">{item.title}</span>
+                    {/if}
+                    <span class="accordion-arrow">&#9660;</span>
+                  </button>
+                  <div class="accordion-body">
+                    <EditableText tag="div" value={item.body} canEdit={$isAdmin} className="accordion-body-text"
+                      onchange={(v) => updateSection(si, (s) => {
+                        if (s.type !== 'accordion') return s;
+                        return { ...s, items: s.items.map((it, i) => i === itemI ? { ...it, body: v } : it) };
+                      })} />
+                    {#if $isAdmin}
+                      <div class="inline-controls" style="margin-top:12px;">
+                        <button class="control-btn" onclick={() =>
+                          updateSection(si, (s) => {
+                            if (s.type !== 'accordion') return s;
+                            return { ...s, items: s.items.length === 1 ? [{ title: 'Заголовок', body: 'Текст блока' }] : s.items.filter((_, i) => i !== itemI) };
+                          })}>- Удалить блок</button>
+                      </div>
+                    {/if}
+                  </div>
+                </div>
+              {/each}
+              {#if $isAdmin}
+                <button class="control-btn add-card-btn" onclick={() =>
+                  updateSection(si, (s) => {
+                    if (s.type !== 'accordion') return s;
+                    return { ...s, items: [...s.items, { title: 'Заголовок', body: 'Текст блока' }] };
+                  })}>+ Блок</button>
+              {/if}
+            </div>
+          </section>
         {/if}
       {/if}
     {/each}
@@ -1003,6 +1074,7 @@
         <button class="control-btn" onclick={() => addSection('pricing')}>Цены</button>
         <button class="control-btn" onclick={() => addSection('registration')}>Регистрация</button>
         <button class="control-btn" onclick={() => addSection('text')}>Текст</button>
+        <button class="control-btn" onclick={() => addSection('accordion')}>Аккордеон</button>
       </div>
     {/if}
   </div>

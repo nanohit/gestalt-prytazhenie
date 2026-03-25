@@ -945,6 +945,74 @@ body {
   white-space: pre-line;
 }
 
+/* ==================== ACCORDION ==================== */
+.accordion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.accordion-item {
+  background: #ffffff;
+  border-radius: 24px;
+  box-shadow: 0 12px 36px rgba(var(--c-dark-rgb), 0.1);
+  overflow: hidden;
+}
+
+.accordion-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 32px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  gap: 16px;
+  font-family: "Geometria", sans-serif;
+}
+
+.accordion-title,
+.accordion-title-edit {
+  font-size: 20px;
+  font-weight: 600;
+  color: #14343f;
+  flex: 1;
+}
+
+.accordion-arrow {
+  font-size: 14px;
+  color: var(--c);
+  transition: transform 0.3s ease;
+  flex-shrink: 0;
+}
+
+.accordion-item.open .accordion-arrow {
+  transform: rotate(180deg);
+}
+
+.accordion-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.35s ease, padding 0.35s ease;
+  padding: 0 32px;
+}
+
+.accordion-item.open .accordion-body {
+  max-height: 2000px;
+  padding: 0 32px 28px;
+}
+
+.accordion-body-text {
+  font-size: 17px;
+  color: #516e7a;
+  line-height: 1.7;
+  white-space: pre-line;
+}
+
 /* ==================== FOOTER ==================== */
 .footer {
   background: linear-gradient(135deg, #1e2a30 0%, #263840 100%);

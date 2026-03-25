@@ -86,12 +86,23 @@ export type TextSectionData = SectionBase & {
   body: string;
 };
 
+export type AccordionItem = {
+  title: string;
+  body: string;
+};
+
+export type AccordionSectionData = SectionBase & {
+  type: 'accordion';
+  items: AccordionItem[];
+};
+
 export type Section =
   | ProgramSectionData
   | SpeakersSectionData
   | PricingSectionData
   | RegistrationSectionData
-  | TextSectionData;
+  | TextSectionData
+  | AccordionSectionData;
 
 export type SiteContent = {
   primaryColor: string;
@@ -205,6 +216,17 @@ export function createTextSection(): TextSectionData {
   };
 }
 
+export function createAccordionSection(): AccordionSectionData {
+  return {
+    id: uid(),
+    type: 'accordion',
+    visible: true,
+    heading: 'Подробнее',
+    navLabel: 'Подробнее',
+    items: [{ title: 'Заголовок', body: 'Текст блока' }],
+  };
+}
+
 export function createSection(type: Section['type']): Section {
   switch (type) {
     case 'program': return createProgramSection();
@@ -212,6 +234,7 @@ export function createSection(type: Section['type']): Section {
     case 'pricing': return createPricingSection();
     case 'registration': return createRegistrationSection();
     case 'text': return createTextSection();
+    case 'accordion': return createAccordionSection();
   }
 }
 
