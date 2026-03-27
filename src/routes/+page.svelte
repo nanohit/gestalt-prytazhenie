@@ -8,8 +8,10 @@
     contentStatus,
     contentError,
     updateContent,
-    loadContent,
   } from '$lib/stores';
+
+  let { data } = $props();
+  siteContent.set(data.content);
   import {
     createEmptyDay,
     createEmptySession,
@@ -42,7 +44,6 @@
     if (localStorage.getItem(STORAGE_KEY) === 'true') {
       isAdmin.set(true);
     }
-    loadContent();
   });
 
   function handleOpenLogin() {
